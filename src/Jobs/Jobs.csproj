@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <!--
+    Entry point for the optional Container Apps scheduled job (B: Cross-cutting concerns).
+    Not deployed in the prototype and never started in-process: there are no in-process timers.
+  -->
+
+  <PropertyGroup>
+    <UserSecretsId>reservationcontroller-jobs</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Domain/Domain.csproj" />
+    <ProjectReference Include="../Infrastructure/Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

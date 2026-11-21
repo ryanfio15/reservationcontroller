@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The typed client generated from /openapi/v1.json lands here (phase 7). -->
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../App.Core/App.Core.csproj" />
+  </ItemGroup>
+
+</Project>

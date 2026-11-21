@@ -116,3 +116,89 @@ Resolved against the GitHub API today, not from memory:
 **Why:** the Gitleaks action asks organisation users for a licence key, which would mean a stored
 secret and would break "no secrets needed for CI". A pinned tarball is also the same binary the
 local `gate.sh scan` uses. `ci.yml` lints clean under actionlint 1.7.12 as committed.
+
+---
+
+## D8 — Phase-0 spike: QRCoder under WebAssembly
+
+**2026-11-21.** A5 phase 0 asks for confirmation that "QRCoder renders under WebAssembly".
+
+**Finding, and it is not a clean pass.** QRCoder 1.9.0's `net6.0` assembly — the one that
+resolves for `net10.0` — *does* reference `System.Drawing.Common`, which has no implementation on
+the browser runtime. The reference comes from the `Bitmap`-based renderers, not from
+`PngByteQRCode`.
+
+**Choice:** `App.UI.QrCodeRenderer` is the only place in the solution that renders a code, and it
+uses `PngByteQRCode` alone, returning a PNG data URL. `tests/Unit/Spikes/QrCoderSpikeTests.cs`
+pins all of this, including the `System.Drawing.Common` reference itself, so the day QRCoder
+changes shape the test says so instead of silently passing.
+
+**Evidence it works:** `dotnet publish src/Web -c Release` succeeds and emits
+`QRCoder.<hash>.wasm` into `wwwroot/_framework` with no `System.Drawing` assembly anywhere in the
+published framework — the trimmer resolved every reachable path without GDI+. A render inside a
+real browser is proven by the phase-7 Playwright journey, which is the only place it can be.
+
+**Fallback if that ever breaks:** render the PNG server-side at the ticket endpoint. The
+reference string is already the only input, so the change is confined to one component.
+
+---
+
+## D9 — Test framework, project layout and the phase trait
+
+**2026-11-21.** Part B names four test projects (`Unit`, `Components`, `Integration`, `E2E`) and
+A4 requires `gate.sh phase <n>` to run "that phase's integration and specification tests", which
+needs a way to say which phase a test belongs to.
+
+**Choices:**
+
+- **xUnit v2 (2.9.3) on VSTest**, with `xunit.runner.visualstudio` 4.0.1 — whose description
+  confirms it runs v1, v2 and v3 tests. The .NET 10 SDK has no `xunit3` template installed, and
+  staying on the VSTest bridge keeps `dotnet test --filter` and `--logger` working exactly as
+  `gate.sh` uses them. Microsoft.Testing.Platform would change both flags.
+- **`[Trait("Phase", "<n>")]`** on every component, integration and specification test.
+  `gate.sh phase <n>` filters on it; `gate.sh integration` and `all` ignore it.
+  `[Trait("Category", "Architecture")]` and `[Trait("Category", "Spike")]` mark the two kinds of
+  test in `Unit` that are not about product logic.
+- **Projects are created in the phase that needs them.** Phase 0 creates `tests/Unit` only;
+  `Integration` arrives in phase 1, `Components` and `E2E` in phase 7. `gate.sh` reports a
+  missing project as "not yet present" in its summary rather than failing, and starts running it
+  the moment it exists.
+
+---
+
+## D10 — Module namespaces, and how the architecture test reads them
+
+**2026-11-21.** B requires an architecture test that "forbids cross-module references except
+through each module's `Contracts` namespace".
+
+**Choice:** modules live at `Infrastructure.Modules.{Identity,Restaurants,Booking,Ticketing}` and
+each exposes `…​.Contracts`. The test reads real IL dependencies through **Mono.Cecil** rather
+than using NetArchTest.
+
+**Why not NetArchTest:** its rules match namespaces by prefix, and `Modules.Booking.Contracts`
+sits *inside* `Modules.Booking`. A prefix rule that forbids the module also forbids its contracts;
+one that permits the contracts permits the whole module. Every way of composing its predicates
+still misses the case that matters most — a type that uses a module's contracts *and* reaches
+past them. Reading each type's actual dependency list makes "anything under the module except its
+Contracts namespace" exact, and it catches a dependency used only inside a method body.
+
+**What came with it:** the same Cecil pass gives `AssemblyDependencies.CallersOf`, which is how
+`No_server_code_reads_the_ambient_clock` enforces A3's "no clock: inject `TimeProvider`", and
+which phase 1's `SYSUTCDATETIME`/`GETUTCDATE` scan test will reuse.
+
+**Also decided:** `Domain.DomainAssembly` and `Infrastructure.InfrastructureAssembly` exist as
+assembly anchors, because the architecture tests need a handle on each assembly before those
+assemblies contain any other type.
+
+---
+
+## D11 — The `App` namespace collides with the root Blazor component
+
+**2026-11-21.** B's layout names the shared libraries `App.Core`, `App.Auth`, `App.ApiClient`
+and `App.UI`, which makes `App` a namespace. The Blazor Web App template's root component is
+also called `App`, so `MapRazorComponents<App>()` does not compile.
+
+**Choice:** `src/Web/Program.cs` aliases it — `using RootComponent = Web.Components.App;`.
+
+**Why:** the alternatives were renaming B's shared libraries or renaming the root component away
+from the framework's convention. A one-line alias at the single use site is the smaller change.

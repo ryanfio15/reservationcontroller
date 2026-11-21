@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Domain/Domain.csproj" />
+    <Project Path="src/Infrastructure/Infrastructure.csproj" />
+    <Project Path="src/Jobs/Jobs.csproj" />
+    <Project Path="src/Web.Client/Web.Client.csproj" />
+    <Project Path="src/Web/Web.csproj" />
+  </Folder>
+  <Folder Name="/src/Features/">
+    <Project Path="src/Features/Features.Admin/Features.Admin.csproj" />
+    <Project Path="src/Features/Features.Diner/Features.Diner.csproj" />
+    <Project Path="src/Features/Features.Host/Features.Host.csproj" />
+  </Folder>
+  <Folder Name="/src/Shared/">
+    <Project Path="src/Shared/App.ApiClient/App.ApiClient.csproj" />
+    <Project Path="src/Shared/App.Auth/App.Auth.csproj" />
+    <Project Path="src/Shared/App.Core/App.Core.csproj" />
+    <Project Path="src/Shared/App.UI/App.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Unit/Unit.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,34 @@
+@* The diner's ticket and the host stand's preview both show the reservation's QR code
+   (B: Reservation ticket and check-in). The 4-digit code is always shown alongside it, by the
+   screens that use this component, so a camera that cannot read the code is never a dead end. *@
+
+<img src="@DataUrl"
+     width="@Size"
+     height="@Size"
+     alt="@Alt"
+     class="@Class" />
+
+@code {
+    /// <summary>The ticket reference to encode.</summary>
+    [Parameter]
+    [EditorRequired]
+    public required string Reference { get; set; }
+
+    /// <summary>Rendered width and height in CSS pixels.</summary>
+    [Parameter]
+    public int Size { get; set; } = 240;
+
+    /// <summary>
+    /// Alternative text. The reference itself is never used here: it is a bearer credential, and
+    /// screen readers and accessibility trees are not a place to put one.
+    /// </summary>
+    [Parameter]
+    public string Alt { get; set; } = "Reservation QR code";
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string DataUrl => QrCodeRenderer.ToPngDataUrl(Reference, PixelsPerModule);
+
+    private int PixelsPerModule => Math.Max(1, Size / 30);
+}

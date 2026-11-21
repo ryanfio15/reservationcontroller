@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!--
+    The WebAssembly entry point. It may reference the generated API client and the UI
+    libraries and nothing else: never Domain, never Infrastructure (architecture test,
+    B: Runtime, framework and architecture).
+  -->
+
+  <PropertyGroup>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Features/Features.Admin/Features.Admin.csproj" />
+    <ProjectReference Include="../Features/Features.Diner/Features.Diner.csproj" />
+    <ProjectReference Include="../Features/Features.Host/Features.Host.csproj" />
+    <ProjectReference Include="../Shared/App.ApiClient/App.ApiClient.csproj" />
+    <ProjectReference Include="../Shared/App.Auth/App.Auth.csproj" />
+    <ProjectReference Include="../Shared/App.Core/App.Core.csproj" />
+    <ProjectReference Include="../Shared/App.UI/App.UI.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,29 @@
+# Gitleaks configuration (docs/DECISIONS.md D4).
+#
+# The repository must contain no secret at all, so this file does not relax detection in
+# general. It only exempts values that are deliberately fake and must stay readable: the
+# local SQL Server container's password and the placeholder ids in configuration samples.
+#
+# Adding an entry here is a decision: say why, and never use it to silence a real finding.
+
+title = "reservationcontroller"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deliberately fake local-development values"
+
+paths = [
+  '''(^|/)\.gitleaks\.toml$''',
+  '''(^|/)docs/DECISIONS\.md$''',
+]
+
+regexes = [
+  # The local container password, which exists only in docker-compose.yml and ci.yml.
+  '''Local_Dev_Not_A_Secret_1''',
+  # Placeholder GUIDs in configuration samples: 00000000-0000-0000-0000-000000000000 and
+  # the all-ones form used for fake tenant and client ids.
+  '''00000000-0000-0000-0000-000000000000''',
+  '''11111111-1111-1111-1111-111111111111''',
+]

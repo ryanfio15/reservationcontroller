@@ -71,3 +71,48 @@ missing .NET 10 SDK a stop-and-ask; the human approved the install.
 
 **Why:** pinning is what stops a second SDK on the machine from changing build behaviour between
 the local run and CI.
+
+---
+
+## D6 — `gate.sh` has three modes beyond the three A4 names
+
+**2026-11-21.** A4 names the modes `unit`, `phase <n>` and `all`, and also requires that every
+CI job call `scripts/gate.sh` so local and remote results cannot differ. A9's five jobs do not
+map onto three modes: the `integration` job runs every integration test on every push (not one
+phase's), and `scan` and `infra` run checks that are not tests at all.
+
+**Choice:** `gate.sh` additionally accepts `integration` (unit plus all component and
+integration tests, no phase filter, no Playwright), `scan` (Gitleaks over the tree and history,
+plus `dotnet list package --vulnerable --include-transitive`) and `infra` (`az bicep build` per
+module, `actionlint`). The three A4 modes behave exactly as specified.
+
+**Why:** the alternative was CI jobs with their own inline commands, which is the one thing the
+gate-script rule exists to prevent.
+
+**Related:** before a solution file exists, the build and test modes report "nothing to build or
+test" and exit 0. This is not an allowed-to-fail job — the moment a solution is committed those
+modes start compiling and testing. Checks that depend on a tool the local machine lacks
+(Gitleaks, actionlint, the Azure CLI) are reported as "not yet present" in the summary and are
+always run in CI, where the tools are installed from pinned versions.
+
+---
+
+## D7 — Pinned versions of CI tools and actions
+
+**2026-11-21.** A9 requires third-party actions pinned by commit SHA and no stored credential.
+Resolved against the GitHub API today, not from memory:
+
+| Thing | Version | Pin |
+|---|---|---|
+| `actions/checkout` | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+| `actions/setup-dotnet` | v6.1.0 | `0f4a354dd5547a28c70b7853dbd95d5b67886e73` |
+| `actions/cache` | v6.1.0 | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` |
+| Gitleaks | 8.30.1 | release tarball, version pinned in `ci.yml` |
+| actionlint | 1.7.12 | release tarball, version pinned in `ci.yml` |
+
+**Choice:** install Gitleaks and actionlint from their pinned release tarballs rather than use
+`gitleaks/gitleaks-action`.
+
+**Why:** the Gitleaks action asks organisation users for a licence key, which would mean a stored
+secret and would break "no secrets needed for CI". A pinned tarball is also the same binary the
+local `gate.sh scan` uses. `ci.yml` lints clean under actionlint 1.7.12 as committed.

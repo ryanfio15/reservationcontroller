@@ -36,6 +36,15 @@ RUN dotnet publish src/Web/Web.csproj \
         -p:ContinuousIntegrationBuild=true \
         --output /app
 
+# Same image, different command: the optional scheduled job runs from /app/jobs
+# (B: Cross-cutting concerns, "Scheduled work"), and phase 9's migration job will too.
+# Published into its own directory so the two sets of dependencies cannot collide.
+RUN dotnet publish src/Jobs/Jobs.csproj \
+        --no-restore \
+        --configuration Release \
+        -p:ContinuousIntegrationBuild=true \
+        --output /app/jobs
+
 # --- runtime ----------------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS final
 WORKDIR /app

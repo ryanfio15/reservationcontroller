@@ -1,0 +1,85 @@
+## .NET build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+artifacts/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+project.fragment.lock.json
+TestResults/
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!packages/build/
+
+## Local secrets and environment — never committed (CLAUDE.md, A3)
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+secrets.json
+*.pfx
+*.p12
+*.pem
+*.key
+local-keys/
+
+## Local databases and container volumes
+*.mdf
+*.ldf
+*.ndf
+*.bak
+.data/
+.mssql/
+
+## Node / frontend tooling
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.vite/
+# Node build output, scoped to where a bundler would write it. A bare `dist/` also matches
+# src/Web/wwwroot/lib/bootstrap/dist, which is vendored stylesheet the app links to and must be
+# committed — without it a clean clone builds an unstyled app that 404s on its own CSS.
+/dist/
+**/wwwroot/dist/
+
+## Playwright
+playwright-report/
+playwright/.cache/
+playwright/.auth/
+test-results/
+traces/
+*.trace.zip
+
+## Editors and OS
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Tooling caches
+.sonarqube/
+*.tmp
+*.log
+!docs/**/*.log

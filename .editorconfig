@@ -1,0 +1,76 @@
+# Shared formatting rules. `scripts/gate.sh unit` runs `dotnet format --verify-no-changes`
+# against these, so a disagreement here is a build failure.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+[*.{json,yml,yaml,md,csproj,props,targets,razor,html,css,js,ts}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{sh,bicep}]
+indent_size = 2
+
+[*.{cmd,bat,ps1}]
+end_of_line = crlf
+
+[*.cs]
+indent_size = 4
+
+# Usings
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+
+# Namespaces and modern syntax
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:silent
+csharp_style_prefer_primary_constructors = false:silent
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_expression_bodied_properties = when_on_single_line:silent
+
+# this. is never required
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+
+# Naming
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbols
+dotnet_naming_rule.interfaces_start_with_i.style = prefix_i_style
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_style.prefix_i_style.required_prefix = I
+dotnet_naming_style.prefix_i_style.capitalization = pascal_case
+
+dotnet_naming_rule.private_fields_are_camel_case.severity = suggestion
+dotnet_naming_rule.private_fields_are_camel_case.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_are_camel_case.style = camel_case_style
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# Correctness rules that matter to this specification
+dotnet_diagnostic.CA2007.severity = none     # ConfigureAwait: not needed in ASP.NET Core
+dotnet_diagnostic.CA1848.severity = none     # LoggerMessage delegates: not worth it here
+dotnet_diagnostic.CA1062.severity = none     # Null checks on public parameters: nullable covers it
+dotnet_diagnostic.CA2100.severity = error    # SQL injection review: the raw SQL must be parameterised
+dotnet_diagnostic.CA2016.severity = error    # Forward CancellationToken
+dotnet_diagnostic.CA1416.severity = error    # Platform compatibility (WebAssembly)
+dotnet_diagnostic.IDE0005.severity = warning # Unnecessary using
+
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none     # Test names may contain underscores
+dotnet_diagnostic.IDE1006.severity = none

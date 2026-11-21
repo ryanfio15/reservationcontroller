@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    EF Core, raw SQL and key access, in modules: Identity, Restaurants, Booking, Ticketing.
+    A module may use another only through that module`s Contracts namespace (architecture test).
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="../Domain/Domain.csproj" />
+    <ProjectReference Include="../Shared/App.Core/App.Core.csproj" />
+  </ItemGroup>
+
+</Project>

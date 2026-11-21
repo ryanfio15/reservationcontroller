@@ -1,0 +1,37 @@
+<Project>
+
+  <!-- Settings every project in the repository shares. Project files stay small. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- A warning is a failure here and in CI, which run the same gate script. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors></WarningsNotAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!--
+      Time zones are part of the specification (B: Time zones): reservation times are shown in
+      the restaurant's zone, so the full ICU data must stay available. Never set
+      InvariantGlobalization.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- IDE0005 (unnecessary using) only runs on build when the documentation file is
+         generated. CS1591 stays off: XML comments are for the decisions worth explaining,
+         not for every public member. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IsPackable>false</IsPackable>
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ContinuousIntegrationBuild)' == 'true'">
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>

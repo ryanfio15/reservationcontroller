@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Entities, status rules, availability rules. No I/O, no framework, no clock. -->
+
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Shared/App.ApiClient/App.ApiClient.csproj" />
+    <ProjectReference Include="../../Shared/App.Auth/App.Auth.csproj" />
+    <ProjectReference Include="../../Shared/App.Core/App.Core.csproj" />
+    <ProjectReference Include="../../Shared/App.UI/App.UI.csproj" />
+  </ItemGroup>
+
+</Project>

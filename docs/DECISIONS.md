@@ -89,11 +89,21 @@ module, `actionlint`). The three A4 modes behave exactly as specified.
 **Why:** the alternative was CI jobs with their own inline commands, which is the one thing the
 gate-script rule exists to prevent.
 
-**Related:** before a solution file exists, the build and test modes report "nothing to build or
-test" and exit 0. This is not an allowed-to-fail job — the moment a solution is committed those
-modes start compiling and testing. Checks that depend on a tool the local machine lacks
-(Gitleaks, actionlint, the Azure CLI) are reported as "not yet present" in the summary and are
-always run in CI, where the tools are installed from pinned versions.
+**Amended 2026-11-21 after the phase-0 review.** The original version had a "no solution file
+yet" shortcut that made every build and test mode exit 0, and it treated a missing tool as a
+harmless skip. Both could report PASS for a check that never ran, which is the one thing this
+script exists to prevent. Now:
+
+- There is no shortcut. `require_solution` exits 2 if no solution file is found.
+- A test run that **matches no test** is a failure. `dotnet test --filter Phase=99` exits 0 with
+  "No test matches the given testcase filter", so one forgotten `[Trait("Phase","4")]` would have
+  turned the phase-4 gate into a silent no-op.
+- A **missing tool** (Gitleaks, actionlint, the Azure CLI) is a failure, because the check it
+  would have performed did not happen. `GATE_ALLOW_MISSING_TOOLS=1` downgrades it to pending for
+  a developer machine; CI never sets it and installs every tool from a pinned version.
+- `tests/Unit` is mandatory. Only the projects a later phase creates are pending.
+- Pending items are always listed, not only under `GATE_VERBOSE`, and the wording distinguishes
+  "a later phase creates this" from "the tool is not installed".
 
 ---
 
@@ -130,8 +140,9 @@ the browser runtime. The reference comes from the `Bitmap`-based renderers, not 
 
 **Choice:** `App.UI.QrCodeRenderer` is the only place in the solution that renders a code, and it
 uses `PngByteQRCode` alone, returning a PNG data URL. `tests/Unit/Spikes/QrCoderSpikeTests.cs`
-pins all of this, including the `System.Drawing.Common` reference itself, so the day QRCoder
-changes shape the test says so instead of silently passing.
+asserts our own invariant — that nothing in `App.UI` reaches a renderer needing GDI+ — rather
+than QRCoder's internals, so a future release that drops the reference is good news and does not
+turn the gate red.
 
 **Evidence it works:** `dotnet publish src/Web -c Release` succeeds and emits
 `QRCoder.<hash>.wasm` into `wwwroot/_framework` with no `System.Drawing` assembly anywhere in the
@@ -202,3 +213,45 @@ also called `App`, so `MapRazorComponents<App>()` does not compile.
 
 **Why:** the alternatives were renaming B's shared libraries or renaming the root component away
 from the framework's convention. A one-line alias at the single use site is the smaller change.
+
+---
+
+## D12 — Phase-0 review outcome
+
+**2026-11-21.** A cold `reviewer` pass over `main..phase/00-bootstrap` found three blocking and
+seven major issues. All ten are fixed on the branch; each was reproduced before being fixed
+rather than taken on trust. The ones that changed a decision rather than a line of code:
+
+- **The vendored Bootstrap stylesheet was not in the repository.** A bare `dist/` in `.gitignore`
+  matched `src/Web/wwwroot/lib/bootstrap/dist`, so 44 files existed only in the working tree.
+  `docker build` copied them anyway, which is why the running stack looked right — but a build
+  from a clean clone would have served an unstyled app and 404ed on its own CSS, breaking A8 and
+  A9's "`main` is always runnable". The ignore rule is now scoped to `/dist/` and
+  `**/wwwroot/dist/`, and the assets are committed.
+- **`gate.sh` could report PASS without running things.** See the amendment to D6 above.
+- **The module-boundary detector was blind to nested types.** Cecil leaves `Namespace` empty on a
+  nested type, so every closure in an assembly was keyed as `<>c` — colliding entries, and names
+  that match no namespace rule. Since C# moves every `async` body into a nested state machine and
+  every lambda into a nested closure, that is most of `Infrastructure`'s IL from phase 1 on. Names
+  are now built as `Outer+Inner`, `+` counts as a namespace boundary, and a compiler-generated
+  nested type's dependencies are also charged to the type the author wrote, so the reported
+  offender is a name that appears in the source.
+- **The detector had never caught anything.** `Infrastructure.Modules` is still empty, so all 12
+  pair cases passed having examined nothing. `tests/Unit/Architecture/Fixtures/` now holds two
+  pretend modules, and `AssemblyDependenciesTests` asserts the detector finds a violation made
+  four different ways — inside `async`, inside a lambda, as a closed generic argument, and as a
+  generic constraint — and does *not* report the type that uses only the other module's
+  contracts. The IL walk gained generic method arguments, generic constraints, events and
+  attribute arguments at the same time.
+- **`/api/*` errors came back as HTML.** `UseStatusCodePagesWithReExecute` was global, so an
+  unmatched `/api/v1/...` path served the Blazor not-found page instead of problem details.
+  It is now split with `UseWhen` on the `/api` prefix.
+- **"Tests pass in a container" was a hand-run command.** `docker-compose.yml` gained a `gate`
+  profile with two services: `gate` runs `scripts/gate.sh` against the working tree, and
+  `clean-clone` clones the repository's committed state inside the container and runs the gate
+  against that — so anything that exists only in the working tree fails there.
+
+Three minors were deliberately not taken, and are carried in `docs/PROGRESS.md` instead: trimming
+`*.pdb` and `*.xml` from the release image (phase 9, where the publish arguments are settled),
+giving CI's `e2e` job a SQL service container (phase 7, when `tests/E2E` exists), and moving the
+compose connection string off `sa` onto `app_runtime` (phase 1, with the schema that creates it).

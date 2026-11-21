@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Web.Api;
 using Web.Configuration;
 using Web.Diagnostics;
@@ -15,11 +16,11 @@ var builder = WebApplication.CreateBuilder(args);
 // touch the database at all, so that probes and the landing page cannot keep a paused database
 // awake (B: Compute, Cross-cutting concerns). A start-up test enforces this from phase 2.
 
+builder.Services.AddSingleton<IValidateOptions<ReservationsOptions>, ReservationsOptionsValidator>();
 builder.Services
     .AddOptions<ReservationsOptions>()
     .Bind(builder.Configuration.GetSection(ReservationsOptions.SectionName))
     .ValidateDataAnnotations()
-    .Validate(o => o.Validate().Count == 0, "Reservations configuration is invalid.")
     .ValidateOnStart();
 
 // Errors leave this host as RFC 9457 problem details, including from the Minimal API groups.
@@ -50,7 +51,19 @@ else
     app.UseExceptionHandler();
 }
 
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Split by surface. An empty-bodied 401, 403, 404 or 405 under /api must come back as RFC 9457
+// problem details (B: API design) — the generated client parses that, not a Blazor page — while
+// a browser navigating to a bad path should still get the not-found page.
+const string ApiPrefix = "/api";
+
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments(ApiPrefix),
+    api => api.UseStatusCodePages());
+
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments(ApiPrefix),
+    site => site.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
+
 app.UseAntiforgery();
 
 // --- endpoints --------------------------------------------------------------------------------

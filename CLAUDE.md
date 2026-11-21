@@ -35,4 +35,6 @@ Read `docs/PROGRESS.md` first on every resume. Open `ARCHITECTURE.md` Part B by 
 - Commit messages: `phase NN: <what changed>` in the imperative, with a body line naming the tests added. Review fixes say `phase NN review: …`.
 - After each push, check the CI run for that commit. A red run is the next task — fix it before new work. Never disable, skip or allow-fail a job to get green; fix the job and say so in the commit message.
 - Never pushed: secrets, keys, real tenant or subscription ids, `.env` files, local database files, build output, Playwright traces containing sign-in data.
-- Run every test through `scripts/gate.sh`: `unit` before every commit, `phase <n>` at a phase gate, `all` for the full suite. CI calls the same script.
+- Workflow hygiene: `permissions:` read-only by default, third-party actions pinned by commit SHA, no secrets needed for CI.
+- `deploy.yml` is triggered **only** by `workflow_dispatch` and gated on the `prod` environment, so pushing it cannot deploy anything. It uses OIDC federation and needs no stored cloud credential. The human turns on deploy-from-`main` after completing A6.
+- Run every test through `scripts/gate.sh`: `unit` before every commit, `phase <n>` at a phase gate, `all` for the full suite. CI calls the same script. A mode never reports PASS for a check it did not run.

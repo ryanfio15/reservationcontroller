@@ -25,7 +25,7 @@ COPY src/Features/Features.Diner/Features.Diner.csproj           src/Features/Fe
 COPY src/Features/Features.Host/Features.Host.csproj             src/Features/Features.Host/
 COPY tests/Unit/Unit.csproj                                      tests/Unit/
 
-RUN dotnet restore src/Web/Web.csproj
+RUN dotnet restore src/Web/Web.csproj && dotnet restore src/Jobs/Jobs.csproj
 
 # --- publish ----------------------------------------------------------------------------------
 FROM restore AS publish
@@ -57,4 +57,6 @@ USER app
 
 COPY --from=publish /app .
 
+# Default command serves the app. The scheduled job runs the same image with
+# ["dotnet", "jobs/Jobs.dll"]; phase 9's migration job overrides the command the same way.
 ENTRYPOINT ["dotnet", "Web.dll"]

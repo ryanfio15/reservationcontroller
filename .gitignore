@@ -52,8 +52,12 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
-dist/
 .vite/
+# Node build output, scoped to where a bundler would write it. A bare `dist/` also matches
+# src/Web/wwwroot/lib/bootstrap/dist, which is vendored stylesheet the app links to and must be
+# committed — without it a clean clone builds an unstyled app that 404s on its own CSS.
+/dist/
+**/wwwroot/dist/
 
 ## Playwright
 playwright-report/

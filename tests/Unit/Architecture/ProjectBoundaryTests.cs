@@ -78,18 +78,27 @@ public sealed class ProjectBoundaryTests
     }
 
     [Fact]
-    public void Nothing_references_the_composition_root()
+    public void No_production_project_references_the_composition_root()
     {
+        // The one legitimate consumer is the integration test host: a start-up test has to boot
+        // the real application through WebApplicationFactory<Program>, which needs a reference
+        // to Web. Exempting the test projects is a decision taken here, in the open, rather than
+        // a weakening forced on this test when phase 2's start-up test arrives.
         var offenders = ProjectGraph.Direct
+            .Where(entry => !IsTestProject(entry.Key))
             .Where(entry => entry.Value.Contains("Web", StringComparer.Ordinal))
             .Select(entry => entry.Key)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
         Assert.True(
             offenders.Length == 0,
-            $"{string.Join(", ", offenders)} reference Web. Nothing may depend on the "
-            + "composition root.");
+            $"{string.Join(", ", offenders)} reference Web. Nothing but a test host may depend "
+            + "on the composition root.");
     }
+
+    private static bool IsTestProject(string project) =>
+        project is "Unit" or "Components" or "Integration" or "E2E";
 
     private static bool IsClientSide(string project) =>
         project is "Web.Client"

@@ -15,8 +15,14 @@
 #   scripts/gate.sh scan        Secret scan over the tree and dependency audit.
 #   scripts/gate.sh infra       Bicep build and lint, workflow lint (from phase 9).
 #
+# A mode never reports PASS for a check it did not run. A test project a later phase has not
+# created yet is reported as pending; a filter that matches no test, or a tool that is missing,
+# is a failure. GATE_ALLOW_MISSING_TOOLS=1 downgrades the missing-tool failure to pending, for a
+# developer machine without the Azure CLI; CI never sets it.
+#
 # Environment:
 #   GATE_VERBOSE=1              Stream every command's output instead of hiding it.
+#   GATE_ALLOW_MISSING_TOOLS=1  Treat an uninstalled tool as pending instead of failing.
 #   GATE_SQL_CONNECTION=...     Connection string for the integration tests.
 #   GATE_BASE_URL=...           Base URL for the Playwright tests.
 
@@ -30,7 +36,7 @@ trap 'rm -rf "$LOG_DIR"' EXIT
 
 FAILURES=0
 STEPS=0
-SKIPS=()
+PENDING=()
 START_TIME=$SECONDS
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -39,8 +45,26 @@ else
   C_RED=""; C_GREEN=""; C_DIM=""; C_OFF=""
 fi
 
-note()  { printf '%s\n' "$*" >&2; }
-skip()  { SKIPS+=("$1"); }
+note() { printf '%s\n' "$*" >&2; }
+
+# A project a later phase creates. Genuinely nothing to run, and the summary says so.
+pending() { PENDING+=("$1"); }
+
+# A tool this machine does not have. The check it would have performed did not happen, so by
+# default that is a failure: a green run must never mean "nothing looked".
+missing_tool() {
+  if [ -n "${GATE_ALLOW_MISSING_TOOLS:-}" ]; then
+    PENDING+=("$1 — tool not installed, allowed by GATE_ALLOW_MISSING_TOOLS")
+    return 0
+  fi
+  FAILURES=$((FAILURES + 1))
+  STEPS=$((STEPS + 1))
+  note ""
+  note "${C_RED}FAILED: $1${C_OFF}"
+  note "  The tool is not installed, so this check did not run. Install it, or set"
+  note "  GATE_ALLOW_MISSING_TOOLS=1 to accept the gap locally. CI installs every tool."
+  note ""
+}
 
 # --- dotnet ------------------------------------------------------------------
 
@@ -59,7 +83,6 @@ if ! command -v dotnet >/dev/null 2>&1; then
   exit 2
 fi
 
-# Quiet, reproducible, CI-shaped builds.
 export DOTNET_NOLOGO=1
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
@@ -70,27 +93,32 @@ export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 run() {
   local label="$1"; shift
   local log="$LOG_DIR/step-$STEPS.log"
+  local status
   STEPS=$((STEPS + 1))
 
   if [ -n "${GATE_VERBOSE:-}" ]; then
     note "${C_DIM}gate: $label${C_OFF}"
-    if "$@" 2>&1 | tee "$log"; then :; else FAILURES=$((FAILURES + 1)); fi
-    # shellcheck disable=SC2319
-    local status=${PIPESTATUS[0]}
-    [ "$status" -eq 0 ] || return 1
-    return 0
+    "$@" 2>&1 | tee "$log"
+    status=${PIPESTATUS[0]}
+  else
+    "$@" >"$log" 2>&1
+    status=$?
   fi
 
-  if "$@" >"$log" 2>&1; then
+  if [ "$status" -eq 0 ]; then
+    LAST_LOG="$log"
     return 0
   fi
 
   FAILURES=$((FAILURES + 1))
   note ""
   note "${C_RED}FAILED: $label${C_OFF}"
-  report_failure "$log"
+  [ -n "${GATE_VERBOSE:-}" ] || report_failure "$log"
+  LAST_LOG="$log"
   return 1
 }
+
+LAST_LOG=""
 
 # Print the lines a human needs from a failed step, not the whole build log.
 report_failure() {
@@ -112,16 +140,20 @@ report_failure() {
 
 SOLUTION="$(ls -1 ./*.slnx ./*.sln 2>/dev/null | head -1 || true)"
 
+require_solution() {
+  [ -n "$SOLUTION" ] && return 0
+  note "${C_RED}gate: no solution file found in $REPO_ROOT.${C_OFF}"
+  note "  Every build and test mode needs one. If the solution was renamed, fix the name here."
+  exit 2
+}
+
 test_project() {  # test_project <name> -> echoes path, or nothing
-  local name="$1"
-  for ext in csproj; do
-    if [ -f "tests/$name/$name.$ext" ]; then
-      printf '%s\n' "tests/$name/$name.$ext"
-      return 0
-    fi
-  done
   local found
-  found="$(ls -1 "tests/$name"/*.csproj 2>/dev/null | head -1 || true)"
+  if [ -f "tests/$1/$1.csproj" ]; then
+    printf '%s\n' "tests/$1/$1.csproj"
+    return 0
+  fi
+  found="$(ls -1 "tests/$1"/*.csproj 2>/dev/null | head -1 || true)"
   [ -n "$found" ] && printf '%s\n' "$found"
   return 0
 }
@@ -129,72 +161,87 @@ test_project() {  # test_project <name> -> echoes path, or nothing
 # --- steps -------------------------------------------------------------------
 
 do_restore() {
-  [ -n "$SOLUTION" ] || return 0
   run "restore" dotnet restore "$SOLUTION"
 }
 
 do_build() {
-  [ -n "$SOLUTION" ] || return 0
   run "build (warnings as errors)" \
     dotnet build "$SOLUTION" --no-restore --configuration Release \
     -warnaserror -p:ContinuousIntegrationBuild=true
 }
 
 do_format() {
-  [ -n "$SOLUTION" ] || return 0
   run "format check" dotnet format "$SOLUTION" --verify-no-changes --no-restore
 }
 
-# do_test <label> <project> [extra dotnet test args...]
-do_test() {
-  local label="$1" project="$2"; shift 2
-  if [ -z "$project" ]; then
-    skip "$label (project does not exist yet)"
-    return 0
+# run_tests <label> <project> [filter]
+#
+# Fails when the run fails AND when it matched no test at all. A filter that selects nothing
+# exits 0 from `dotnet test`, which would turn a phase gate into a silent no-op — one forgotten
+# [Trait("Phase","n")] and the whole phase would appear to pass.
+run_tests() {
+  local label="$1" project="$2" filter="${3:-}"
+
+  if [ -n "$filter" ]; then
+    run "$label" dotnet test "$project" --no-restore --no-build --configuration Release \
+      --filter "$filter" --logger "console;verbosity=minimal"
+  else
+    run "$label" dotnet test "$project" --no-restore --no-build --configuration Release \
+      --logger "console;verbosity=minimal"
   fi
-  run "$label" dotnet test "$project" --no-restore --no-build --configuration Release \
-    --logger "console;verbosity=minimal" -- "$@"
+  local outcome=$?
+
+  if [ "$outcome" -eq 0 ] && [ -n "$LAST_LOG" ] \
+     && grep -qE 'No test matches the given testcase filter|No test is available' "$LAST_LOG"; then
+    FAILURES=$((FAILURES + 1))
+    note ""
+    note "${C_RED}FAILED: $label — the run matched no test.${C_OFF}"
+    grep -E 'No test matches the given testcase filter|No test is available' "$LAST_LOG" \
+      | head -5 | sed 's/^/  /' >&2
+    if [ -n "$filter" ]; then
+      note "  Nothing carries '$filter'. Check the [Trait] on the tests for this phase."
+    fi
+    note ""
+    return 1
+  fi
+
+  return "$outcome"
 }
 
+# The unit project is not optional: it holds the architecture tests and every Domain rule.
 do_unit() {
-  do_test "unit + architecture tests" "$(test_project Unit)"
+  local project
+  project="$(test_project Unit)"
+
+  if [ -z "$project" ]; then
+    FAILURES=$((FAILURES + 1))
+    STEPS=$((STEPS + 1))
+    note ""
+    note "${C_RED}FAILED: unit + architecture tests — tests/Unit does not exist.${C_OFF}"
+    note ""
+    return 1
+  fi
+
+  run_tests "unit + architecture tests" "$project"
+}
+
+# do_optional_tests <label> <project name> [filter] — pending until the phase that creates it.
+do_optional_tests() {
+  local label="$1" name="$2" filter="${3:-}"
+  local project
+  project="$(test_project "$name")"
+
+  if [ -z "$project" ]; then
+    pending "$label — tests/$name is created by a later phase"
+    return 0
+  fi
+
+  run_tests "$label" "$project" "$filter"
 }
 
 do_phase() {
-  local n="$1"
-  local components integration
-  components="$(test_project Components)"
-  integration="$(test_project Integration)"
-
-  if [ -n "$components" ]; then
-    run "component tests (phase $n)" dotnet test "$components" \
-      --no-restore --no-build --configuration Release \
-      --filter "Phase=$n" --logger "console;verbosity=minimal"
-  else
-    skip "component tests (project does not exist yet)"
-  fi
-
-  if [ -n "$integration" ]; then
-    run "integration tests (phase $n)" dotnet test "$integration" \
-      --no-restore --no-build --configuration Release \
-      --filter "Phase=$n" --logger "console;verbosity=minimal"
-  else
-    skip "integration tests (project does not exist yet)"
-  fi
-}
-
-# do_test_projects <name...> — every test in each project, no phase filter.
-do_test_projects() {
-  local p
-  for name in "$@"; do
-    p="$(test_project "$name")"
-    if [ -n "$p" ]; then
-      run "$name tests" dotnet test "$p" --no-restore --no-build \
-        --configuration Release --logger "console;verbosity=minimal"
-    else
-      skip "$name tests (project does not exist yet)"
-    fi
-  done
+  do_optional_tests "component tests (phase $1)" Components "Phase=$1"
+  do_optional_tests "integration tests (phase $1)" Integration "Phase=$1"
 }
 
 do_scan() {
@@ -204,51 +251,45 @@ do_scan() {
       run "secret scan (history)" gitleaks git . --no-banner --redact
     fi
   else
-    skip "secret scan (gitleaks is not installed; CI runs it)"
+    missing_tool "secret scan (gitleaks)"
   fi
 
-  if [ -n "$SOLUTION" ]; then
-    local log="$LOG_DIR/audit.log"
-    STEPS=$((STEPS + 1))
-    if dotnet list "$SOLUTION" package --vulnerable --include-transitive >"$log" 2>&1; then
-      if grep -q -i 'has the following vulnerable packages' "$log"; then
-        FAILURES=$((FAILURES + 1))
-        note ""
-        note "${C_RED}FAILED: dependency audit${C_OFF}"
-        grep -E -i 'vulnerable|> ' "$log" | head -40 | sed 's/^/  /' >&2
-        note ""
-      fi
-    else
+  local log="$LOG_DIR/audit.log"
+  STEPS=$((STEPS + 1))
+  if dotnet list "$SOLUTION" package --vulnerable --include-transitive >"$log" 2>&1; then
+    if grep -q -i 'has the following vulnerable packages' "$log"; then
       FAILURES=$((FAILURES + 1))
-      note "${C_RED}FAILED: dependency audit (command error)${C_OFF}"
-      report_failure "$log"
+      note ""
+      note "${C_RED}FAILED: dependency audit${C_OFF}"
+      grep -E -i 'vulnerable|> ' "$log" | head -40 | sed 's/^/  /' >&2
+      note ""
     fi
+  else
+    FAILURES=$((FAILURES + 1))
+    note "${C_RED}FAILED: dependency audit (command error)${C_OFF}"
+    report_failure "$log"
   fi
 }
 
 do_infra() {
-  local any=0
-  if [ -d infra ]; then
+  if [ -d infra ] && compgen -G 'infra/*.bicep' >/dev/null; then
     if command -v az >/dev/null 2>&1; then
       local f
       for f in infra/*.bicep; do
-        [ -f "$f" ] || continue
-        any=1
         run "az bicep build $f" az bicep build --file "$f" --stdout
       done
     else
-      skip "bicep build (the Azure CLI is not installed; CI runs it)"
+      missing_tool "bicep build (the Azure CLI)"
     fi
+  else
+    pending "bicep build — infra/ is created in phase 9"
   fi
-  if [ -d .github/workflows ]; then
-    any=1
-    if command -v actionlint >/dev/null 2>&1; then
-      run "workflow lint" actionlint
-    else
-      skip "workflow lint (actionlint is not installed; CI runs it)"
-    fi
+
+  if command -v actionlint >/dev/null 2>&1; then
+    run "workflow lint" actionlint
+  else
+    missing_tool "workflow lint (actionlint)"
   fi
-  [ "$any" -eq 1 ] || skip "infra checks (nothing to validate yet)"
 }
 
 # --- summary -----------------------------------------------------------------
@@ -256,20 +297,21 @@ do_infra() {
 summarise() {
   local mode="$1"
   local elapsed=$((SECONDS - START_TIME))
+  local s
 
-  if [ "${#SKIPS[@]}" -gt 0 ] && [ -n "${GATE_VERBOSE:-}" ]; then
-    local s
-    for s in "${SKIPS[@]}"; do note "${C_DIM}gate: not run — $s${C_OFF}"; done
-  fi
+  # Always listed, never only under GATE_VERBOSE: a check that did not run must be visible.
+  for s in ${PENDING+"${PENDING[@]}"}; do
+    note "${C_DIM}gate: pending — $s${C_OFF}"
+  done
 
-  local not_run=""
-  [ "${#SKIPS[@]}" -gt 0 ] && not_run=", ${#SKIPS[@]} not yet present"
+  local pending_note=""
+  [ "${#PENDING[@]}" -gt 0 ] && pending_note=", ${#PENDING[@]} pending"
 
   if [ "$FAILURES" -eq 0 ]; then
-    note "${C_GREEN}gate $mode: PASS${C_OFF} — $STEPS steps in ${elapsed}s$not_run"
+    note "${C_GREEN}gate $mode: PASS${C_OFF} — $STEPS steps in ${elapsed}s$pending_note"
     return 0
   fi
-  note "${C_RED}gate $mode: FAIL${C_OFF} — $FAILURES of $STEPS steps failed in ${elapsed}s$not_run"
+  note "${C_RED}gate $mode: FAIL${C_OFF} — $FAILURES of $STEPS steps failed in ${elapsed}s$pending_note"
   return 1
 }
 
@@ -277,19 +319,9 @@ summarise() {
 
 MODE="${1:-}"
 
-# Before the solution exists there is genuinely nothing to compile or run. This is not a
-# skipped check: the modes that need a solution say so, and start checking the moment one
-# is committed.
-bootstrap_shortcut() {
-  [ -n "$SOLUTION" ] && return 1
-  note "${C_DIM}gate: no solution file yet — nothing to build or test.${C_OFF}"
-  note "${C_GREEN}gate $1: PASS${C_OFF} — 0 steps (repository is still being bootstrapped)"
-  return 0
-}
-
 case "$MODE" in
   unit)
-    bootstrap_shortcut unit && exit 0
+    require_solution
     do_restore && do_build && do_format
     do_unit
     summarise unit
@@ -300,27 +332,31 @@ case "$MODE" in
       note "gate: 'phase' needs a phase number, for example: scripts/gate.sh phase 4"
       exit 2
     fi
-    bootstrap_shortcut "phase $PHASE" && exit 0
+    require_solution
     do_restore && do_build && do_format
     do_unit
     do_phase "$PHASE"
     summarise "phase $PHASE"
     ;;
   integration)
-    bootstrap_shortcut integration && exit 0
+    require_solution
     do_restore && do_build && do_format
     do_unit
-    do_test_projects Components Integration
+    do_optional_tests "component tests" Components
+    do_optional_tests "integration tests" Integration
     summarise integration
     ;;
   all)
-    bootstrap_shortcut all && exit 0
+    require_solution
     do_restore && do_build && do_format
     do_unit
-    do_test_projects Components Integration E2E
+    do_optional_tests "component tests" Components
+    do_optional_tests "integration tests" Integration
+    do_optional_tests "end-to-end tests" E2E
     summarise all
     ;;
   scan)
+    require_solution
     do_scan
     summarise scan
     ;;

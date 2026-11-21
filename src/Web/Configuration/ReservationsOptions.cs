@@ -21,7 +21,8 @@ public sealed class ReservationsOptions
     public string? PublicBaseUrl { get; init; }
 
     /// <summary>
-    /// Validates the parts that cannot be expressed as attributes.
+    /// Every problem with these values, named one by one. Run by
+    /// <see cref="ReservationsOptionsValidator"/> at start-up and by the readiness check.
     /// </summary>
     internal IReadOnlyList<string> Validate()
     {

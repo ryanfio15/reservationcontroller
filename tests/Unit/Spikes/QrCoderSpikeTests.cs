@@ -40,18 +40,15 @@ public sealed class QrCoderSpikeTests
     [Fact]
     public void The_shared_renderer_uses_only_the_managed_PNG_path()
     {
-        // The finding behind this test: QRCoder's net6.0 assembly does reference
+        // The finding behind this test: as of QRCoder 1.9.0 its net6.0 assembly references
         // System.Drawing.Common, which has no implementation on the browser runtime. A reference
         // is harmless as long as no reachable code path needs it, which is why
         // App.UI.QrCodeRenderer is the only way this solution renders a code, and why it uses
         // PngByteQRCode alone. That the trimmer agrees was checked by publishing the client,
         // which emits QRCoder into _framework and no System.Drawing assembly at all
-        // (docs/DECISIONS.md D8).
-        Assert.Contains(
-            "System.Drawing.Common",
-            typeof(PngByteQRCode).Assembly.GetReferencedAssemblies()
-                .Select(name => name.Name ?? string.Empty));
-
+        // (docs/DECISIONS.md D8). What is asserted here is our own invariant, not QRCoder's
+        // shape: a future release that drops the GDI+ reference is good news and must not turn
+        // this red.
         var renderer = AssemblyDependencies.CallersOf(
             typeof(App.UI.QrCodeRenderer).Assembly,
             "System.Drawing.Bitmap::.ctor",

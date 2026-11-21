@@ -57,5 +57,51 @@ services:
       retries: 6
       start_period: 20s
 
+  # Runs the gate inside a container, so "build and tests pass in the container" is a command
+  # anyone can repeat rather than something that was done once by hand. Not started by
+  # `docker compose up`: it belongs to the `gate` profile.
+  #
+  #   docker compose run --rm gate unit
+  #   docker compose run --rm gate integration
+  #
+  # It bind-mounts the working tree rather than copying it, so it tests exactly what is checked
+  # out. `clean-clone` below is the one that proves a fresh clone works.
+  gate:
+    image: mcr.microsoft.com/dotnet/sdk:10.0-noble
+    profiles: ["gate"]
+    working_dir: /repo
+    volumes:
+      - .:/repo
+      - nuget-cache:/root/.nuget/packages
+    environment:
+      HOME: /root
+      GATE_SQL_CONNECTION: >-
+        Server=sql,1433;Database=Reservations;User Id=sa;Password=Local_Dev_Not_A_Secret_1;
+        Encrypt=True;TrustServerCertificate=True
+    entrypoint: ["bash", "scripts/gate.sh"]
+    command: ["unit"]
+
+  # A5 phase 0 and A8 ask for the gate to pass "from a clean clone, in a container". This clones
+  # the repository's committed state into the container and runs the gate against that, so a file
+  # that exists only in the working tree — an ignored vendored asset, say — fails here.
+  #
+  #   docker compose run --rm clean-clone unit
+  clean-clone:
+    image: mcr.microsoft.com/dotnet/sdk:10.0-noble
+    profiles: ["gate"]
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+      - nuget-cache:/root/.nuget/packages
+    environment:
+      HOME: /root
+    entrypoint:
+      - bash
+      - -c
+      - 'git clone --quiet /src /clone && cd /clone && exec bash scripts/gate.sh "$@"'
+      - --
+    command: ["unit"]
+
 volumes:
   sql-data:
+  nuget-cache:

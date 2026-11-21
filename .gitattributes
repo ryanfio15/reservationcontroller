@@ -1,0 +1,37 @@
+* text=auto eol=lf
+
+*.sh            text eol=lf
+*.ps1           text eol=crlf
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+*.sln           text eol=crlf
+*.csproj        text eol=lf
+*.props         text eol=lf
+*.targets       text eol=lf
+*.cs            text eol=lf diff=csharp
+*.razor         text eol=lf diff=html
+*.cshtml        text eol=lf diff=html
+*.json          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.md            text eol=lf
+*.sql           text eol=lf
+*.bicep         text eol=lf
+*.js            text eol=lf
+*.ts            text eol=lf
+*.css           text eol=lf
+*.html          text eol=lf diff=html
+
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.webp          binary
+*.woff          binary
+*.woff2         binary
+*.pdf           binary
+*.zip           binary
+*.snk           binary
+*.dll           binary
+*.exe           binary

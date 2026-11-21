@@ -23,6 +23,11 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
   </ItemGroup>
 
+  <ItemGroup Label="Data access">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" />
+  </ItemGroup>
+
   <ItemGroup Label="Reservation tickets">
     <!-- Phase 0 spike: renders under WebAssembly without System.Drawing (PngByteQRCode). -->
     <PackageVersion Include="QRCoder" Version="1.9.0" />

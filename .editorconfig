@@ -74,3 +74,13 @@ dotnet_diagnostic.IDE0005.severity = warning # Unnecessary using
 [tests/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none     # Test names may contain underscores
 dotnet_diagnostic.IDE1006.severity = none
+
+# EF Core writes these. They are generated code, held to the schema they describe rather than to
+# this repository's style rules, and they must never be hand-edited except to add the raw SQL a
+# migration needs.
+[**/Persistence/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+dotnet_diagnostic.IDE0005.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.CA1861.severity = none
